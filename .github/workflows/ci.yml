@@ -3,8 +3,6 @@ name: Java CI/CD with Docker
 on:
   push:
     branches: ["**"]
-  pull_request:
-    branches: ["**"]
 
 jobs:
   # 🔹 Job 1: Lint
@@ -20,13 +18,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-          cache: maven
-
-      - name: 📦 Install Maven
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y maven
-          mvn --version
 
       - name: 🔍 Run Checkstyle
         run: mvn checkstyle:check
@@ -35,6 +26,7 @@ jobs:
   test:
     name: 🧪 Tests + Coverage
     runs-on: ubuntu-latest
+    needs: lint
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -44,13 +36,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-          cache: maven
-
-      - name: 📦 Install Maven
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y maven
-          mvn --version
 
       - name: 🧪 Run Tests with Coverage
         run: mvn clean verify
@@ -61,21 +46,11 @@ jobs:
           name: coverage-report
           path: target/site/jacoco/
 
-      - name: 📈 Coverage Summary
-        run: |
-          if [ -f target/site/jacoco/index.html ]; then
-            echo "✅ Coverage report generated successfully"
-            echo "📊 Check coverage in artifacts"
-          else
-            echo "❌ Coverage report not found"
-            exit 1
-          fi
-
-  # 🔹 Job 3: Build
+  # 🔹 Job 3: Build JAR
   build:
     name: 📦 Build JAR
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: test
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -85,13 +60,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-          cache: maven
-
-      - name: 📦 Install Maven
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y maven
-          mvn --version
 
       - name: 📦 Build JAR
         run: mvn clean package -DskipTests
@@ -102,12 +70,11 @@ jobs:
           name: app-jar
           path: target/*.jar
 
-  # 🔹 Job 4: Docker
+  # 🔹 Job 4: Docker Build & Test
   docker:
     name: 🐳 Docker Build & Test
     runs-on: ubuntu-latest
-    needs: [test]
-    if: success()
+    needs: test
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -117,65 +84,22 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-          cache: maven
-
-      - name: 📦 Install Maven
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y maven
-          mvn --version
 
       - name: 📦 Build JAR for Docker
         run: mvn clean package -DskipTests
 
       - name: 🐳 Build Docker Image
-        run: |
-          docker build -t mini-banco:latest .
-          echo "✅ Docker image built successfully"
+        run: docker build -t mini-banco:latest .
 
       - name: 🧪 Test Docker Container
         run: |
-          echo "🚀 Testing Docker container..."
-          
-          # Ejecutar contenedor en background
-          docker run -d --name test-container -p 8080:8080 mini-banco:latest
-          
-          # Esperar que el contenedor inicie
-          echo "⏳ Waiting for container to start..."
-          sleep 10
-          
-          # Verificar que el contenedor está corriendo
-          if docker ps | grep -q "test-container"; then
-            echo "✅ Container is running successfully"
-          
-            # Mostrar logs del contenedor
-            echo "📝 Container logs:"
-            docker logs test-container
-          
+          echo "🚀 Running Docker container..."
+          OUTPUT=$(docker run --rm mini-banco:latest 2>&1)
+          echo "$OUTPUT"
+
+          if echo "$OUTPUT" | grep -q "Application finished successfully"; then
+            echo "✅ Docker test PASSED"
           else
-            echo "❌ Container failed to start"
-            docker logs test-container
+            echo "❌ Docker test FAILED"
             exit 1
           fi
-
-      - name: 🧹 Cleanup
-        if: always()
-        run: |
-          docker stop test-container || true
-          docker rm test-container || true
-
-  # 🔹 Job 5: Deploy Info
-  deploy-info:
-    name: 🚀 Deploy Info
-    runs-on: ubuntu-latest
-    needs: [build, docker]
-    if: success()
-    steps:
-      - name: 🎉 Deployment Ready
-        run: |
-          echo "🎉 All checks passed!"
-          echo "✅ Linting: OK"
-          echo "✅ Tests: OK (Coverage ≥90%)"
-          echo "✅ Build: OK"
-          echo "✅ Docker: OK"
-          echo "🚀 Application is ready for deployment!"
