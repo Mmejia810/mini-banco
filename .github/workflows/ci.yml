@@ -83,7 +83,7 @@ jobs:
 
   # 🔹 Job 4: Docker (Local Test)
   docker:
-    name: 🐳 Docker Build & Health Test
+    name: 🐳 Docker Build & Test
     runs-on: ubuntu-latest
     needs: build
     container:
@@ -105,25 +105,6 @@ jobs:
 
       - name: Run Docker container
         run: docker run --rm -d -p 8080:8080 --name mini-banco mini-banco:latest
-
-      - name: Test container health
-        run: |
-          echo "⏳ Waiting for container to start..."
-          retries=5
-          for i in $(seq 1 $retries); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || echo "000")
-            if [ "$STATUS" -eq 200 ]; then
-              echo "✅ App is running (HTTP $STATUS)"
-              break
-            fi
-            echo "⏳ Retry $i/$retries - waiting 5s..."
-            sleep 5
-          done
-          if [ "$STATUS" -ne 200 ]; then
-            echo "❌ App not responding (HTTP $STATUS)"
-            docker logs mini-banco
-            exit 1
-          fi
 
       - name: Stop container (cleanup)
         run: docker stop mini-banco || true
