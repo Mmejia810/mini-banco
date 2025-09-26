@@ -107,10 +107,11 @@
                 </executions>
                 <configuration>
                     <configLocation>google_checks.xml</configLocation>
-                    <encoding>UTF-8</encoding>
+                    <inputEncoding>UTF-8</inputEncoding>
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                 </configuration>
+
             </plugin>
 
             <!-- Empaquetado (si es Spring Boot) -->
@@ -118,7 +119,15 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>3.2.5</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
+
 
             <!-- Docker Build con Jib -->
             <plugin>
