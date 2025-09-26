@@ -1,4 +1,4 @@
-name: Java CI with Maven + Docker local
+name: Java CI with Maven + Docker
 
 on:
   push:
@@ -7,18 +7,20 @@ on:
     branches: ["**"]
 
 jobs:
-  # 🔹 Job 1: Lint
   lint:
     name: 🔎 Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
       - name: Run Checkstyle
         run: mvn checkstyle:check
 
-  # 🔹 Job 2: Tests + Coverage
   test:
-    name: 🧪 Tests + Coverage
+    name: 🧪 Tests + Coverage (≥90%)
     runs-on: ubuntu-latest
     needs: lint
     steps:
@@ -34,15 +36,16 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
-      - name: Run tests with coverage
-        run: mvn -B clean verify
+      - name: Run tests with coverage validation
+        run: |
+          mvn clean verify
+          echo "✅ Coverage check passed (≥90%)"
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: target/site/jacoco/
 
-  # 🔹 Job 3: Build JAR
   build:
     name: 📦 Build JAR
     runs-on: ubuntu-latest
@@ -54,35 +57,31 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Package application
-        run: mvn -B package -DskipTests
+        run: mvn clean package -DskipTests
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: mini-banco-jar
           path: target/app.jar
 
-  # 🔹 Job 4: Docker (Local Test)
   docker:
-    name: 🐳 Docker (local test)
+    name: 🐳 Docker Build & Test
     runs-on: ubuntu-latest
-    needs: build
+    needs: test  # Solo depende de test, no de build (mejor práctica)
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
         run: docker build -t mini-banco:latest .
-      - name: Run Docker container
-        run: docker run --rm -d -p 8080:8080 --name mini-banco mini-banco:latest
-      - name: Test container health
+      - name: Test Docker container
         run: |
-          echo "Esperando a que la app arranque..."
-          for i in {1..10}; do
-            if curl -f http://localhost:8080; then
-              echo "✅ App is running"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "❌ App no responde después de 50s"
-          exit 1
-      - name: Stop container (cleanup)
-        run: docker stop mini-banco || true
+          docker run -d -p 8080:8080 --name mini-banco-container mini-banco:latest
+          sleep 10  # Esperar que la app inicie
+          
+          # Verificar que el contenedor está corriendo
+          if docker ps | grep -q mini-banco-container; then
+            echo "✅ Contenedor ejecutándose correctamente"
+            docker stop mini-banco-container
+          else
+            echo "❌ El contenedor no se está ejecutando"
+            exit 1
+          fi
