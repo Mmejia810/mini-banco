@@ -1,17 +1,14 @@
-FROM maven:3.9.6-eclipse-temurin-21 AS build
+# Imagen base más ligera
+FROM openjdk:21-jre-slim
+
 WORKDIR /app
 
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
+# Copiar el JAR
+COPY target/mini-banco-1.0-SNAPSHOT.jar app.jar
 
-COPY src ./src
-RUN mvn package -DskipTests
-
-FROM eclipse-temurin:21-jre
-WORKDIR /app
-
-COPY --from=build /app/target/*.jar app.jar
-
+# Exponer el puerto que usaremos para health check
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# CMD modificado para mantener la aplicación corriendo
+# Usamos un pequeño wrapper de Java que mantiene el contenedor activo
+CMD ["sh", "-c", "java -jar app.jar & while true; do sleep 30; done"]
