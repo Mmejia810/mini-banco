@@ -1,52 +1,45 @@
-name: Java CI/CD with Docker
+name: CI Pipeline
 
 on:
   push:
-    branches: ["**"]
   pull_request:
-    branches: ["**"]
 
 jobs:
-  # 🔹 Job 1: Lint
+  # -----------------------------
+  # 1. Linter con Super-Linter
+  # -----------------------------
   lint:
-    name: 🔎 Lint (Checkstyle)
     runs-on: ubuntu-latest
-    container:
-      image: ubuntu:22.04   # Imagen base local sin login
-      options: --init
     steps:
-      - name: Install Java & Maven
-        run: |
-          apt-get update && apt-get install -y openjdk-21-jdk maven curl git
-          java -version
-          mvn -version
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Checkstyle
-        run: mvn checkstyle:check
+      - name: Run Super-Linter
+        uses: github/super-linter@v6
+        env:
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VALIDATE_ALL_CODEBASE: true
+          # Solo valida Java (puedes habilitar más lenguajes si quieres)
+          VALIDATE_JAVA: true
 
-  # 🔹 Job 2: Tests + Coverage
-  test:
-    name: 🧪 Tests + Coverage
+  # -----------------------------
+  # 2. Tests con cobertura
+  # -----------------------------
+  tests:
     runs-on: ubuntu-latest
     needs: lint
-    container:
-      image: ubuntu:22.04
-      options: --init
     steps:
-      - name: Install Java & Maven
-        run: |
-          apt-get update && apt-get install -y openjdk-21-jdk maven curl git
-          java -version
-          mvn -version
+      - uses: actions/checkout@v4
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
 
       - name: Run tests with coverage
-        run: mvn -B clean verify  # JaCoCo en pom exige ≥90%
+        run: mvn verify
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -54,57 +47,47 @@ jobs:
           name: coverage-report
           path: target/site/jacoco/
 
-  # 🔹 Job 3: Build JAR
+  # -----------------------------
+  # 3. Build (empaquetado)
+  # -----------------------------
   build:
-    name: 📦 Build JAR
     runs-on: ubuntu-latest
-    needs: test
-    container:
-      image: ubuntu:22.04
-      options: --init
+    needs: tests
     steps:
-      - name: Install Java & Maven
-        run: |
-          apt-get update && apt-get install -y openjdk-21-jdk maven curl git
-          java -version
-          mvn -version
+      - uses: actions/checkout@v4
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
 
-      - name: Package application
-        run: mvn -B package -DskipTests
+      - name: Build package
+        run: mvn package -DskipTests
 
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mini-banco-jar
+          name: app-jar
           path: target/*.jar
 
-  # 🔹 Job 4: Docker (Local Test)
+    # -----------------------------
+  # 4. Docker build & run (solo local en CI)
+  # -----------------------------
   docker:
-    name: 🐳 Docker Build & Test
     runs-on: ubuntu-latest
     needs: build
-    container:
-      image: ubuntu:22.04
-      options: --init
     steps:
-      - name: Install Java, Maven & Docker
-        run: |
-          apt-get update && apt-get install -y openjdk-21-jdk maven docker.io curl git
-          java -version
-          mvn -version
-          docker --version
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Build Docker image
         run: docker build -t mini-banco:latest .
 
       - name: Run Docker container
-        run: docker run --rm -d -p 8080:8080 --name mini-banco mini-banco:latest
+        run: docker run -d -p 8080:8080 --name mini-banco mini-banco:latest
 
-      - name: Stop container (cleanup)
+      - name: Test container is running
+        run: docker ps -a
+
+      - name: Stop container
         run: docker stop mini-banco || true
